@@ -5,7 +5,7 @@
 ![](image/sing-box.png)
 
 ## 集成程序
-[sing-box](https://github.com/SagerNet/sing-box/releases))
+[sing-box](https://github.com/SagerNet/sing-box/releases)
 
 ## 注意事项
 1. 当前仅支持x86_64 平台。
