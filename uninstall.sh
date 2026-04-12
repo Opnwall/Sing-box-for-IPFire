@@ -1,64 +1,47 @@
 #!/bin/bash
+# sing-box 卸载脚本
+set -e
 
-echo -e ''
-echo -e "\033[32m========Sing-box for OPNsense 一键卸载脚本=========\033[0m"
-echo -e ''
-
-# 定义颜色变量
-GREEN="\033[32m"
-YELLOW="\033[33m"
-RED="\033[31m"
-RESET="\033[0m"
-
-# 定义日志函数
-log() {
-    local color="$1"
-    local message="$2"
-    echo -e "${color}${message}${RESET}"
+print_step() {
+    echo
+    echo "==> $1"
 }
 
-# 删除程序和配置
-log "$YELLOW" "删除代理程序和配置，请稍等..."
+if [[ $EUID -ne 0 ]]; then
+    echo "错误：请使用 root 运行此脚本。" >&2
+    exit 1
+fi
 
-# 停止服务
-service singbox stop > /dev/null 2>&1
+print_step "准备卸载 sing-box"
+echo "该操作将删除 sing-box 程序、Web 管理页面、启动项、运行文件和配置文件。"
+read -p "是否继续？(y/N): " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+    echo "操作已取消。"
+    exit 0
+fi
 
-# 删除配置
-rm -rf /usr/local/etc/sing-box
+print_step "停止 sing-box 服务"
+/etc/init.d/sing-box stop >/dev/null 2>&1 || true
 
-# 删除rc.d
-rm -f /usr/local/etc/rc.d/sing-box
+print_step "移除开机自启"
+rm -f /etc/rc.d/rc3.d/S99sing-box
 
-# 删除rc.conf
-rm -f /etc/rc.conf.d/sing-box
-
-# 删除action
-rm -f /usr/local/opnsense/service/conf/actions.d/actions_sing-box.conf
-
-# 删除inc
-rm -f /usr/local/etc/inc/plugins.inc.d/sing_box.inc
-
-# 删除php
-rm -f /usr/local/www/services_sing_box.php
-rm -f /usr/local/www/status_sing_box_logs.php
-rm -f /usr/local/www/status_sing_box.php
-rm -f /usr/local/www/services_sub.php
-rm -f /usr/bin/sub
-
-
-# 删除程序
+print_step "删除程序文件"
+rm -f /etc/init.d/sing-box
 rm -f /usr/local/bin/sing-box
-echo ""
+rm -f /srv/web/ipfire/cgi-bin/sing-box.cgi
+rm -f /etc/sudoers.d/sing-box
 
-# 删除菜单和缓存
-rm -rf /usr/local/opnsense/mvc/app/models/OPNsense/sing-box
+print_step "删除运行文件"
+rm -rf /var/run/sing-box
+rm -f /var/log/sing-box.log
 
-# 重启服务
-log "$YELLOW" "重新应用所有更改，请稍等..."
-/usr/local/etc/rc.reload_all >/dev/null 2>&1
-service configd restart > /dev/null 2>&1
-echo ""
+print_step "删除配置文件"
+rm -rf /usr/local/etc/sing-box
+rm -f /var/ipfire/menu.d/81-singbox.menu
 
-# 完成提示
-log "$GREEN" "卸载完成，请手动删除TUN接口、改回DoT设置。"
-echo ""
+print_step "重载 Web 服务"
+/etc/init.d/apache reload >/dev/null 2>&1
+
+echo
+echo "sing-box 卸载完成！"
