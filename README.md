@@ -18,7 +18,7 @@
 sh install.sh
 ```
 ## 卸载命令
-以 root 用户登录终端，运行以下命令安装：
+以 root 用户登录终端，运行以下命令卸载：
 ```bash
 sh uninstall.sh
 ```
