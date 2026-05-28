@@ -39,23 +39,25 @@ print_step "设置文件权限"
 chmod +x /etc/init.d/sing-box
 chmod +x /usr/local/bin/sing-box
 chmod +x /srv/web/ipfire/cgi-bin/sing-box.cgi
-chmod a+w /usr/local/etc/sing-box/config.json
+chown root:nobody /usr/local/etc/sing-box/config.json
+chmod 660 /usr/local/etc/sing-box/config.json
 
 install -d -m 755 /var/run/sing-box
 touch /var/log/sing-box.log
-chmod 644 /var/log/sing-box.log
+chown root:nobody /var/log/sing-box.log
+chmod 664 /var/log/sing-box.log
 
 print_step "配置开机自启"
 ln -sf /etc/init.d/sing-box /etc/rc.d/rc3.d/S99sing-box
 
 print_step "配置sudo权限"
+sudoers_tmp="/etc/sudoers.d/sing-box.tmp"
 {
     echo "nobody ALL=(ALL) NOPASSWD: /etc/init.d/sing-box"
-    echo "nobody ALL=(ALL) NOPASSWD: /usr/local/bin/sing-box"
-    echo "nobody ALL=(ALL) NOPASSWD: /bin/sh"
-    echo "nobody ALL=(ALL) NOPASSWD: /bin/rm"
-} >> /etc/sudoers.d/sing-box
-chmod 440 /etc/sudoers.d/sing-box
+} > "$sudoers_tmp"
+chmod 440 "$sudoers_tmp"
+visudo -cf "$sudoers_tmp" >/dev/null
+mv "$sudoers_tmp" /etc/sudoers.d/sing-box
 
 print_step "重载 Web 服务"
 /etc/init.d/apache reload >/dev/null 2>&1

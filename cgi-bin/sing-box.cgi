@@ -3,6 +3,7 @@ use strict;
 use utf8;
 use Encode qw(decode FB_CROAK);
 use CGI::Carp qw(fatalsToBrowser carpout);
+use File::Temp qw(tempdir);
 
 require '/var/ipfire/general-functions.pl';
 require "${General::swroot}/lang.pl";
@@ -25,7 +26,7 @@ my $sudo_cmd      = "/usr/bin/sudo";
 # AJAX 日志接口
 if ($settings{'ajax'} && $settings{'ajax'} eq 'log') {
     print "Content-Type: text/plain; charset=UTF-8\n\n";
-    system("tail -n 100 $singbox_log");
+    system("tail", "-n", "100", $singbox_log);
     exit;
 }
 
@@ -34,6 +35,24 @@ if ($settings{'ajax'} && $settings{'ajax'} eq 'log') {
 my $action      = $settings{'ACTION'} || '';
 my $cmd_output  = '';
 my $show_output = 0;
+
+sub request_is_safe_for_action {
+    return 1 if $action eq '';
+    return 0 if (($ENV{'REQUEST_METHOD'} || '') ne 'POST');
+
+    my $host = $ENV{'HTTP_HOST'} || '';
+    return 0 if $host eq '';
+
+    my $seen_source_header = 0;
+    foreach my $header ('HTTP_ORIGIN', 'HTTP_REFERER') {
+        my $value = $ENV{$header} || '';
+        next if $value eq '';
+        $seen_source_header = 1;
+        return 0 if $value !~ m{^https?://\Q$host\E(?:/|$)}i;
+    }
+
+    return $seen_source_header;
+}
 
 sub decode_post_utf8 {
     my ($value) = @_;
@@ -48,13 +67,16 @@ sub decode_post_utf8 {
 
 sub run_service_command {
     my ($command) = @_;
-    my $out = `$sudo_cmd -n $service $command 2>&1`;
-    return normalize_command_output($out);
+    return run_command($sudo_cmd, "-n", $service, $command);
 }
 
 sub clear_log_file {
-    my $out = `$sudo_cmd -n /bin/sh -c ': > $singbox_log' 2>&1`;
-    return normalize_command_output($out);
+    my $fh;
+    if (!open($fh, ">", $singbox_log)) {
+        return "清空日志失败: $!";
+    }
+    close($fh);
+    return '';
 }
 
 sub normalize_command_output {
@@ -63,32 +85,49 @@ sub normalize_command_output {
     return $out;
 }
 
+sub run_command {
+    my (@cmd) = @_;
+    my $out = '';
+    if (open(my $fh, "-|", @cmd)) {
+        local $/;
+        $out = <$fh>;
+        close($fh);
+    } else {
+        $out = "无法执行命令: $!";
+    }
+    return normalize_command_output($out);
+}
+
+sub write_config_file {
+    my ($conf_text) = @_;
+    my $fh;
+    if (!open($fh, ">:encoding(UTF-8)", $singbox_conf)) {
+        return (0, "无法写入配置文件: $!");
+    }
+
+    print $fh $conf_text;
+    if (!close($fh)) {
+        return (0, "保存失败：无法写入配置文件");
+    }
+
+    return (1, '');
+}
+
 sub validate_config_text {
     my ($conf_text) = @_;
 
-    my $tmp_dir  = "/tmp/singbox_check";
+    my $tmp_dir = tempdir("singbox_check_XXXXXX", TMPDIR => 1, CLEANUP => 1);
     my $tmp_conf = "$tmp_dir/config.json";
-    my $tmp_src  = "/tmp/singbox_check_input.json";
 
     my $fh;
-    if (!open($fh, ">:encoding(UTF-8)", $tmp_src)) {
+    if (!open($fh, ">:encoding(UTF-8)", $tmp_conf)) {
         return (0, "无法创建临时配置文件");
     }
     print $fh $conf_text;
     close($fh);
 
-    my $out = `$sudo_cmd -n /bin/sh -c 'rm -rf "$tmp_dir"; mkdir -p "$tmp_dir"; cp "$tmp_src" "$tmp_conf"' 2>&1`;
+    my $out = run_command($singbox_bin, "check", "-C", $tmp_dir);
     my $code = $? >> 8;
-    unlink $tmp_src;
-
-    if ($code != 0) {
-        return (0, normalize_command_output($out || "无法创建临时校验目录"));
-    }
-
-    $out = `$sudo_cmd -n $singbox_bin check -C $tmp_dir 2>&1`;
-    $code = $? >> 8;
-
-    `$sudo_cmd -n /bin/rm -rf $tmp_dir 2>&1`;
 
     if ($code == 0) {
         return (1, normalize_command_output($out));
@@ -98,7 +137,11 @@ sub validate_config_text {
 }
 
  # ====== 保存配置 / 服务控制 ======
-if ($action eq 'saveconf') {
+if (!request_is_safe_for_action()) {
+    $cmd_output  = "请求被拒绝：管理操作必须来自当前 Web 界面";
+    $show_output = 1;
+}
+elsif ($action eq 'saveconf') {
     if (defined $settings{'CONF'}) {
         my $conf_text = decode_post_utf8($settings{'CONF'});
 
@@ -107,26 +150,13 @@ if ($action eq 'saveconf') {
             $cmd_output  = "保存失败：配置校验未通过\n" . $check_out;
             $show_output = 1;
         } else {
-            my $tmp_save = "/tmp/singbox_save_input.json";
-            my $fh;
-            if (!open($fh, ">:encoding(UTF-8)", $tmp_save)) {
-                $cmd_output  = "保存失败：无法创建临时配置文件";
+            my ($saved, $save_out) = write_config_file($conf_text);
+            if ($saved) {
+                $cmd_output  = "配置已保存";
                 $show_output = 1;
             } else {
-                print $fh $conf_text;
-                close($fh);
-
-                my $out = `$sudo_cmd -n /bin/sh -c 'cp "$tmp_save" "$singbox_conf"' 2>&1`;
-                my $code = $? >> 8;
-                unlink $tmp_save;
-
-                if ($code == 0) {
-                    $cmd_output  = "配置已保存";
-                    $show_output = 1;
-                } else {
-                    $cmd_output  = "保存失败：无法写入配置文件\n" . normalize_command_output($out);
-                    $show_output = 1;
-                }
+                $cmd_output  = normalize_command_output($save_out);
+                $show_output = 1;
             }
         }
     } else {
@@ -328,8 +358,12 @@ print "<div style='margin-bottom:8px;'><button type='submit' name='ACTION' value
 print "<pre id='logbox' style='background:#000;color:#0f0;height:220px;overflow:auto;width:100%;box-sizing:border-box;margin:0;white-space:pre-wrap;'>";
 
 if (-e $singbox_log) {
-    my @lines = `tail -n 100 $singbox_log`;
-    print @lines;
+    if (open(my $log_fh, "-|", "tail", "-n", "100", $singbox_log)) {
+        local $/;
+        my $log_content = <$log_fh>;
+        close($log_fh);
+        print &Header::escape($log_content);
+    }
 } else {
     print "暂无日志文件。";
 }
