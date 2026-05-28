@@ -21,8 +21,9 @@ ensure_dirs() {
     install -d -m 755 "$PIDDIR"
     install -d -m 755 /var/log
     touch "$LOGFILE"
+    chown root:nobody "$LOGFILE" 2>/dev/null || true
     chmod 755 "$PIDDIR"
-    chmod 644 "$LOGFILE"
+    chmod 664 "$LOGFILE"
 }
 
 is_running() {
