@@ -11,11 +11,11 @@
             "store_fakeip": true
         },
         "clash_api": {
-            "external_controller": "0.0.0.0:9090",
+            "external_controller": "127.0.0.1:9090",
             "external_ui": "/usr/local/etc/sing-box/ui",
             "external_ui_download_url": "",
             "external_ui_download_detour": "",
-            "secret": "123456"
+            "secret": "change-this-secret"
         }
     },
     "dns": {
