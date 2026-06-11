@@ -1,4 +1,10 @@
-## sing-box for IPFire
+## Sing-box for IPFire
+
+![IPFire](https://img.shields.io/badge/IPFire-2.29-orange)
+![Architecture](https://img.shields.io/badge/Arch-x86__64-blue)
+![Sing-Box](https://img.shields.io/badge/Sing--Box-Latest-brightgreen)
+![License](https://img.shields.io/badge/License-GPLv3-Clause-orange)
+
 控制 sing-box 运行，实现透明代理。包含配置修改、程序控制、日志查看功能。在IPFire-2.29-x86_64-Core-Update-200
 上测试通过。
 
