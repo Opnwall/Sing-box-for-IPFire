@@ -220,7 +220,7 @@ print <<'EOF';
     background: #111;
     border: 1px solid #666;
     box-sizing: border-box;
-    min-height: 420px;
+    min-height: 220px;
 }
 .config-highlight {
     position: absolute;
@@ -250,7 +250,7 @@ print <<'EOF';
     position: relative;
     z-index: 2;
     width: 100%;
-    min-height: 420px;
+    min-height: 220px;
     margin: 0;
     padding: 8px;
     border: 0;
