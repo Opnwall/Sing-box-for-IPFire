@@ -5,7 +5,7 @@
 ![Sing-Box](https://img.shields.io/badge/Sing--Box-Latest-brightgreen)
 ![License](https://img.shields.io/badge/License-GPLv3-green)
 
-控制 sing-box 运行，实现透明代理。包含配置修改、程序控制、日志查看功能。在IPFire-2.29-x86_64-Core-Update-200
+控制 sing-box 运行，实现透明代理。包含配置修改、程序控制、日志查看功能。在IPFire-2.29-x86_64-Core-Update-203
 上测试通过。
 
 ![](image/sing-box.png)
