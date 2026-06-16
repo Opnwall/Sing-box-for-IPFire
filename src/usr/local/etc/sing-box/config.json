@@ -25,7 +25,7 @@
       "tag": "tun-in",
       "auto_route": true,
       "strict_route": true,
-      "interface_name": "tun_0",
+      "interface_name": "tun_1",
       "address": [
         "172.19.0.1/30"
       ],
