@@ -1,51 +1,63 @@
 #!/bin/bash
-set -e
-
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SRC_DIR="${SCRIPT_DIR}/src"
+set -euo pipefail
 
 print_step() {
     echo
     echo "==> $1"
 }
 
-if [[ $EUID -ne 0 ]]; then
-    echo "错误：请使用 root 运行此脚本。" >&2
+die() {
+    echo "Error: $1" >&2
     exit 1
+}
+
+if [[ $EUID -ne 0 ]]; then
+    die "Please run this script as root."
 fi
 
-print_step "准备安装 sing-box"
-echo "该操作将安装 sing-box、Web 管理页面、菜单入口，并重载 Web 服务。"
-read -p "是否继续？(y/N): " confirm
+BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$BASE_DIR"
+
+print_step "Preparing to install sing-box"
+echo "This will install sing-box, the Web UI page, the menu entry, and reload the Web service."
+read -r -p "Continue? (y/N): " confirm
 if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
-    echo "操作已取消。"
+    echo "Operation cancelled."
     exit 0
 fi
 
-print_step "检查安装目录"
-for dir in "${SRC_DIR}/etc" "${SRC_DIR}/usr" "${SRC_DIR}/srv" "${SRC_DIR}/var"; do
-    if [[ ! -d "$dir" ]]; then
-        echo "错误：缺少目录 $dir" >&2
-        exit 1
-    fi
-done
+print_step "Checking source files"
+[[ -d src ]] || die "Missing directory src"
+[[ -f src/etc/rc.d/init.d/sing-box ]] || die "Missing file src/etc/rc.d/init.d/sing-box"
+[[ -f src/usr/local/bin/sing-box ]] || die "Missing file src/usr/local/bin/sing-box"
+[[ -f src/usr/local/etc/sing-box/config.json ]] || die "Missing file src/usr/local/etc/sing-box/config.json"
+[[ -f src/srv/web/ipfire/cgi-bin/sing-box.cgi ]] || die "Missing file src/srv/web/ipfire/cgi-bin/sing-box.cgi"
+[[ -f src/var/ipfire/menu.d/81-singbox.menu ]] || die "Missing file src/var/ipfire/menu.d/81-singbox.menu"
 
-print_step "复制文件"
-install -d -m 755 /etc/init.d
-install -d -m 755 /usr/local/bin
-install -d -m 755 /usr/local/etc/sing-box
-install -d -m 755 /srv/web/ipfire/cgi-bin
-install -d -m 755 /var/ipfire/menu.d
-cp -a "${SRC_DIR}/etc/init.d/sing-box" /etc/init.d/sing-box
-cp -a "${SRC_DIR}/usr/local/bin/sing-box" /usr/local/bin/sing-box
-cp -a "${SRC_DIR}/usr/local/etc/sing-box/." /usr/local/etc/sing-box/
-cp -a "${SRC_DIR}/srv/web/ipfire/cgi-bin/sing-box.cgi" /srv/web/ipfire/cgi-bin/sing-box.cgi
-cp -a "${SRC_DIR}/var/ipfire/menu.d/81-singbox.menu" /var/ipfire/menu.d/81-singbox.menu
+print_step "Stopping old service"
+/etc/rc.d/init.d/sing-box stop >/dev/null 2>&1 || true
 
-print_step "设置文件权限"
-chmod +x /etc/init.d/sing-box
+print_step "Copying files"
+tmp_config=""
+if [[ -f /usr/local/etc/sing-box/config.json ]]; then
+    tmp_config="$(mktemp /tmp/sing-box-config.backup.XXXXXX)"
+    cp -p /usr/local/etc/sing-box/config.json "$tmp_config"
+fi
+
+cp -R -f src/. /
+
+if [[ -n "$tmp_config" && -f "$tmp_config" ]]; then
+    install -m 660 "$tmp_config" /usr/local/etc/sing-box/config.json
+    rm -f "$tmp_config"
+fi
+
+print_step "Setting file permissions"
+chown root:root /etc/rc.d/init.d/sing-box /usr/local/bin/sing-box /srv/web/ipfire/cgi-bin/sing-box.cgi 2>/dev/null || true
+chmod 755 /etc/rc.d/init.d/sing-box
 chmod +x /usr/local/bin/sing-box
 chmod +x /srv/web/ipfire/cgi-bin/sing-box.cgi
+chmod 644 /var/ipfire/menu.d/81-singbox.menu 2>/dev/null || true
+chown nobody:nobody /var/ipfire/menu.d/81-singbox.menu 2>/dev/null || true
 if grep -q '"secret": "change-this-secret"' /usr/local/etc/sing-box/config.json; then
     singbox_secret="$(od -An -N16 -tx1 /dev/urandom | tr -d ' \n')"
     sed -i "s/\"secret\": \"change-this-secret\"/\"secret\": \"${singbox_secret}\"/" /usr/local/etc/sing-box/config.json
@@ -58,10 +70,10 @@ touch /var/log/sing-box.log
 chown root:nobody /var/log/sing-box.log
 chmod 664 /var/log/sing-box.log
 
-print_step "配置开机自启"
-ln -sf /etc/init.d/sing-box /etc/rc.d/rc3.d/S99sing-box
+print_step "Configuring startup"
+ln -sf /etc/rc.d/init.d/sing-box /etc/rc.d/rc3.d/S99sing-box
 
-print_step "配置sudo权限"
+print_step "Configuring sudo permissions"
 sudoers_tmp="$(mktemp /tmp/sing-box-sudoers.XXXXXX)"
 trap 'rm -f "$sudoers_tmp"' EXIT
 cat > "$sudoers_tmp" <<'EOF'
@@ -75,8 +87,9 @@ visudo -cf "$sudoers_tmp" >/dev/null
 mv "$sudoers_tmp" /etc/sudoers.d/sing-box
 trap - EXIT
 
-print_step "重载 Web 服务"
-/etc/init.d/apache reload >/dev/null 2>&1
+print_step "Reloading Web service"
+/etc/init.d/apache reload >/dev/null 2>&1 || true
 
 echo
-echo "sing-box 安装完成！刷新页面，前往 Web 界面进行配置（服务 > Sing-Box）。"
+echo "sing-box installation completed."
+echo "Open the IPFire Web UI and go to Services > Sing-Box."
