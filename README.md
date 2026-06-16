@@ -1,9 +1,7 @@
 ## Sing-box for IPFire
 
 ![IPFire](https://img.shields.io/badge/IPFire-2.29-orange)
-![Architecture](https://img.shields.io/badge/Arch-x86__64-blue)
 ![Sing-Box](https://img.shields.io/badge/Sing--Box-Latest-brightgreen)
-![License](https://img.shields.io/badge/License-GPLv3-green)
 
 sing-box 是一款功能强大、性能优秀的开源网络代理平台，支持多种主流代理协议。它基于现代化架构设计，具备高性能、低资源占用和灵活配置等特点，可用于网络代理、流量分流、负载均衡以及安全访问等场景。
 
