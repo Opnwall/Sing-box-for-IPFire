@@ -4,6 +4,7 @@ use utf8;
 use Encode qw(decode FB_CROAK);
 use CGI::Carp qw(fatalsToBrowser carpout);
 use File::Temp qw(tempdir);
+use JSON::PP qw(encode_json);
 
 require '/var/ipfire/general-functions.pl';
 require "${General::swroot}/lang.pl";
@@ -20,6 +21,108 @@ my $singbox_conf  = "/usr/local/etc/sing-box/config.json";
 my $singbox_log   = "/var/log/sing-box.log";
 my $sudo_cmd      = "/usr/bin/sudo";
 # ========================
+
+my %fallback = (
+    page_title => 'Sing-Box',
+    service_status => 'Service Status',
+    status => 'Status',
+    running => 'Running',
+    stopped => 'Stopped',
+    start => 'Start',
+    stop => 'Stop',
+    restart => 'Restart',
+    config_file => 'Configuration File',
+    save_config => 'Save Configuration',
+    log_output => 'Log Output',
+    clear_log => 'Clear Log',
+    no_log_file => 'No log file available.',
+    clear_log_failed => 'Failed to clear log',
+    command_failed => 'Unable to execute command',
+    save_write_failed => 'Save failed: unable to write configuration file',
+    write_config_failed => 'Unable to write configuration file',
+    temp_config_failed => 'Unable to create temporary configuration file',
+    config_check_failed => 'Configuration validation failed',
+    save_check_failed => 'Save failed: configuration validation did not pass',
+    config_saved => 'Configuration saved',
+    save_no_config => 'Save failed: no configuration content received',
+    request_rejected => 'Request rejected: management actions must come from the current Web UI',
+    log_cleared => 'Log cleared',
+    log_load_failed => 'Log loading failed, HTTP status: ',
+);
+
+my %fallback_zh = (
+    page_title => 'Sing-Box',
+    service_status => '服务状态',
+    status => '状态',
+    running => '运行中',
+    stopped => '已停止',
+    start => '启动',
+    stop => '停止',
+    restart => '重启',
+    config_file => '配置文件',
+    save_config => '保存配置',
+    log_output => '日志输出',
+    clear_log => '清空日志',
+    no_log_file => '暂无日志文件。',
+    clear_log_failed => '清空日志失败',
+    command_failed => '无法执行命令',
+    save_write_failed => '保存失败：无法写入配置文件',
+    write_config_failed => '无法写入配置文件',
+    temp_config_failed => '无法创建临时配置文件',
+    config_check_failed => '配置校验失败',
+    save_check_failed => '保存失败：配置校验未通过',
+    config_saved => '配置已保存',
+    save_no_config => '保存失败：未收到配置内容',
+    request_rejected => '请求被拒绝：管理操作必须来自当前 Web 界面',
+    log_cleared => '日志已清空',
+    log_load_failed => '日志加载失败，HTTP 状态: ',
+);
+
+my %fallback_tw = (
+    page_title => 'Sing-Box',
+    service_status => '服務狀態',
+    status => '狀態',
+    running => '執行中',
+    stopped => '已停止',
+    start => '啟動',
+    stop => '停止',
+    restart => '重新啟動',
+    config_file => '設定檔',
+    save_config => '儲存設定',
+    log_output => '記錄輸出',
+    clear_log => '清除記錄',
+    no_log_file => '沒有記錄檔。',
+    clear_log_failed => '清除記錄失敗',
+    command_failed => '無法執行命令',
+    save_write_failed => '儲存失敗：無法寫入設定檔',
+    write_config_failed => '無法寫入設定檔',
+    temp_config_failed => '無法建立暫存設定檔',
+    config_check_failed => '設定驗證失敗',
+    save_check_failed => '儲存失敗：設定驗證未通過',
+    config_saved => '設定已儲存',
+    save_no_config => '儲存失敗：未收到設定內容',
+    request_rejected => '請求被拒絕：管理操作必須來自目前 Web 介面',
+    log_cleared => '記錄已清除',
+    log_load_failed => '記錄載入失敗，HTTP 狀態: ',
+);
+
+sub L {
+    my ($key) = @_;
+    if (($Lang::language || '') eq 'tw' && exists $fallback_tw{$key}) {
+        return $fallback_tw{$key};
+    }
+    if (($Lang::language || '') eq 'zh' && exists $fallback_zh{$key}) {
+        return $fallback_zh{$key};
+    }
+    return $fallback{$key} || $key;
+}
+
+sub strip_ansi {
+    my ($text) = @_;
+    $text ||= '';
+    $text =~ s/\e\[[0-9;?]*[ -\/]*[@-~]//g;
+    return $text;
+}
 
 &Header::getcgihash(\%settings);
 
@@ -39,9 +142,10 @@ if ($is_ajax_log) {
         local $/;
         my $log_content = <$log_fh>;
         close($log_fh);
+        $log_content = strip_ansi($log_content);
         print $log_content;
     } else {
-        print "暂无日志文件。\n";
+        print L('no_log_file') . "\n";
     }
     exit;
 }
@@ -89,7 +193,7 @@ sub run_service_command {
 sub clear_log_file {
     my $fh;
     if (!open($fh, ">", $singbox_log)) {
-        return "清空日志失败: $!";
+        return L('clear_log_failed') . ": $!";
     }
     close($fh);
     return '';
@@ -109,7 +213,7 @@ sub run_command {
         $out = <$fh>;
         close($fh);
     } else {
-        $out = "无法执行命令: $!";
+        $out = L('command_failed') . ": $!";
     }
     return normalize_command_output($out);
 }
@@ -118,12 +222,12 @@ sub write_config_file {
     my ($conf_text) = @_;
     my $fh;
     if (!open($fh, ">:encoding(UTF-8)", $singbox_conf)) {
-        return (0, "无法写入配置文件: $!");
+        return (0, L('write_config_failed') . ": $!");
     }
 
     print $fh $conf_text;
     if (!close($fh)) {
-        return (0, "保存失败：无法写入配置文件");
+        return (0, L('save_write_failed'));
     }
 
     return (1, '');
@@ -137,7 +241,7 @@ sub validate_config_text {
 
     my $fh;
     if (!open($fh, ">:encoding(UTF-8)", $tmp_conf)) {
-        return (0, "无法创建临时配置文件");
+        return (0, L('temp_config_failed'));
     }
     print $fh $conf_text;
     close($fh);
@@ -149,12 +253,12 @@ sub validate_config_text {
         return (1, normalize_command_output($out));
     }
 
-    return (0, normalize_command_output($out || "配置校验失败"));
+    return (0, normalize_command_output($out || L('config_check_failed')));
 }
 
  # ====== 保存配置 / 服务控制 ======
 if (!request_is_safe_for_action()) {
-    $cmd_output  = "请求被拒绝：管理操作必须来自当前 Web 界面";
+    $cmd_output  = L('request_rejected');
     $show_output = 1;
 }
 elsif ($action eq 'saveconf') {
@@ -163,12 +267,12 @@ elsif ($action eq 'saveconf') {
 
         my ($ok, $check_out) = validate_config_text($conf_text);
         if (!$ok) {
-            $cmd_output  = "保存失败：配置校验未通过\n" . $check_out;
+            $cmd_output  = L('save_check_failed') . "\n" . $check_out;
             $show_output = 1;
         } else {
             my ($saved, $save_out) = write_config_file($conf_text);
             if ($saved) {
-                $cmd_output  = "配置已保存";
+                $cmd_output  = L('config_saved');
                 $show_output = 1;
             } else {
                 $cmd_output  = normalize_command_output($save_out);
@@ -176,7 +280,7 @@ elsif ($action eq 'saveconf') {
             }
         }
     } else {
-        $cmd_output  = "保存失败：未收到配置内容";
+        $cmd_output  = L('save_no_config');
         $show_output = 1;
     }
 }
@@ -199,7 +303,7 @@ elsif ($action eq 'restart') {
 }
 elsif ($action eq 'clearlog') {
     my $out = clear_log_file();
-    $cmd_output = ($out ? $out : '') . "日志已清空";
+    $cmd_output = ($out ? $out : '') . L('log_cleared');
     $show_output = 1;
 }
 
@@ -208,7 +312,7 @@ my $status = run_service_command('status');
 chomp $status;
 
 # ====== 页面 ======
-&Header::openpage("Sing-Box", 1, '');
+&Header::openpage(L('page_title'), 1, '');
 print "<meta charset='UTF-8'>\n";
 print <<'EOF';
 <style>
@@ -307,20 +411,20 @@ EOF
 print "<form method='post'>";
 
 # ====== 服务状态 ======
-&Header::openbox('100%', 'left', '服务状态');
+&Header::openbox('100%', 'left', L('service_status'));
 
-print "<b>状态:</b> ";
+print "<b>" . L('status') . ":</b> ";
 if ($status =~ /running/i) {
-    print "<span class='status-dot running'></span><span style='color:green;'>运行中</span>";
+    print "<span class='status-dot running'></span><span style='color:green;'>" . L('running') . "</span>";
 } else {
-    print "<span class='status-dot stopped'></span><span style='color:red;'>已停止</span>";
+    print "<span class='status-dot stopped'></span><span style='color:red;'>" . L('stopped') . "</span>";
 }
 
 print "<br><br>";
 
-print "<button type='submit' name='ACTION' value='start'>启动</button>  ";
-print "<button type='submit' name='ACTION' value='stop'>停止</button>  ";
-print "<button type='submit' name='ACTION' value='restart'>重启</button>";
+print "<button type='submit' name='ACTION' value='start'>" . L('start') . "</button>  ";
+print "<button type='submit' name='ACTION' value='stop'>" . L('stop') . "</button>  ";
+print "<button type='submit' name='ACTION' value='restart'>" . L('restart') . "</button>";
 
 if ($show_output) {
     print "<br><br><pre style='color:#ff3333;background:#111;padding:5px;box-sizing:border-box;margin:0;white-space:pre-wrap;'>";
@@ -331,10 +435,10 @@ if ($show_output) {
 &Header::closebox();
 
 # ====== 配置文件 ======
-&Header::openbox('100%', 'left', '配置文件');
+&Header::openbox('100%', 'left', L('config_file'));
 
 print "<div class='editor-toolbar'>";
-print "<button type='submit' name='ACTION' value='saveconf'>保存配置</button>";
+print "<button type='submit' name='ACTION' value='saveconf'>" . L('save_config') . "</button>";
 print "</div>";
 
 my $conf_content = '';
@@ -367,9 +471,9 @@ print "</div>";
 &Header::closebox();
 
 # ====== 日志输出 ======
-&Header::openbox('100%', 'left', '日志输出');
+&Header::openbox('100%', 'left', L('log_output'));
 
-print "<div style='margin-bottom:8px;'><button type='submit' name='ACTION' value='clearlog'>清空日志</button></div>";
+print "<div style='margin-bottom:8px;'><button type='submit' name='ACTION' value='clearlog'>" . L('clear_log') . "</button></div>";
 
 print "<pre id='logbox' style='background:#000;color:#0f0;height:220px;overflow:auto;width:100%;box-sizing:border-box;margin:0;white-space:pre-wrap;'>";
 
@@ -378,18 +482,21 @@ if (-e $singbox_log) {
         local $/;
         my $log_content = <$log_fh>;
         close($log_fh);
+        $log_content = strip_ansi($log_content);
         print &Header::escape($log_content);
     }
 } else {
-    print "暂无日志文件。";
+    print L('no_log_file');
 }
 
 print "</pre>";
 
-print <<'EOF';
+my $js_log_load_failed = encode_json(L('log_load_failed'));
+print <<EOF;
 <script>
 (function() {
     var logbox = document.getElementById('logbox');
+    var logRequestInFlight = false;
 
     function scrollLogToBottom() {
         if (logbox) {
@@ -399,18 +506,30 @@ print <<'EOF';
 
     function fetchLogs() {
         if (!logbox) return;
+        if (logRequestInFlight) return;
+        logRequestInFlight = true;
 
         var xhr = new XMLHttpRequest();
         xhr.open('GET', window.location.pathname + '?ajax=log&_=' + Date.now(), true);
+        xhr.timeout = 10000;
         xhr.onreadystatechange = function() {
             if (xhr.readyState !== 4) return;
+            logRequestInFlight = false;
 
             if (xhr.status === 200) {
                 logbox.textContent = xhr.responseText;
                 scrollLogToBottom();
             } else {
-                logbox.textContent = '日志加载失败，HTTP 状态: ' + xhr.status;
+                logbox.textContent = $js_log_load_failed + xhr.status;
             }
+        };
+        xhr.onerror = function() {
+            logRequestInFlight = false;
+            logbox.textContent = $js_log_load_failed + 'network';
+        };
+        xhr.ontimeout = function() {
+            logRequestInFlight = false;
+            logbox.textContent = $js_log_load_failed + 'timeout';
         };
         xhr.send();
     }
