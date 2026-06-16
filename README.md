@@ -5,7 +5,14 @@
 ![Sing-Box](https://img.shields.io/badge/Sing--Box-Latest-brightgreen)
 ![License](https://img.shields.io/badge/License-GPLv3-green)
 
-控制 sing-box 运行，实现透明代理。包含配置修改、程序控制、日志查看功能。
+sing-box 是一款功能强大、性能优秀的开源网络代理平台，支持多种主流代理协议，包括 Shadowsocks、VMess、VLESS、Trojan、Hysteria、TUIC 和 SOCKS 等。
+
+它基于现代化架构设计，具备高性能、低资源占用和灵活配置等特点，可用于网络代理、流量分流、负载均衡以及安全访问等场景。sing-box 同时支持 Linux、Windows、macOS、Android 和 iOS 等多个平台，并兼容 TUN 模式、DNS 规则和丰富的路由策略。
+
+由于其强大的功能和活跃的社区支持，sing-box 已成为许多用户构建自托管网络代理和跨平台网络解决方案的重要工具之一。
+
+本插件可以在 IPFire 上控制 sing-box 运行，实现透明代理。包含配置修改、程序控制、日志查看功能。
+
 在IPFire-2.29-x86_64-Core-Update-203上测试通过。
 
 ![](image/sing-box.png)
