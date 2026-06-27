@@ -33,6 +33,7 @@ print_step "Checking source files"
 [[ -f src/usr/local/etc/sing-box/config.json ]] || die "Missing file src/usr/local/etc/sing-box/config.json"
 [[ -f src/srv/web/ipfire/cgi-bin/sing-box.cgi ]] || die "Missing file src/srv/web/ipfire/cgi-bin/sing-box.cgi"
 [[ -f src/var/ipfire/menu.d/81-singbox.menu ]] || die "Missing file src/var/ipfire/menu.d/81-singbox.menu"
+[[ -f src/etc/sudoers.d/sing-box ]] || die "Missing file src/etc/sudoers.d/sing-box"
 
 print_step "Stopping old service"
 /etc/rc.d/init.d/sing-box stop >/dev/null 2>&1 || true
@@ -44,7 +45,9 @@ if [[ -f /usr/local/etc/sing-box/config.json ]]; then
     cp -p /usr/local/etc/sing-box/config.json "$tmp_config"
 fi
 
-cp -R -f src/. /
+for dir in etc srv usr var; do
+    cp -R -f "src/$dir/." "/$dir/"
+done
 
 if [[ -n "$tmp_config" && -f "$tmp_config" ]]; then
     install -m 660 "$tmp_config" /usr/local/etc/sing-box/config.json
@@ -52,10 +55,11 @@ if [[ -n "$tmp_config" && -f "$tmp_config" ]]; then
 fi
 
 print_step "Setting file permissions"
-chown root:root /etc/rc.d/init.d/sing-box /usr/local/bin/sing-box /srv/web/ipfire/cgi-bin/sing-box.cgi 2>/dev/null || true
+chown root:root /etc/rc.d/init.d/sing-box /etc/sudoers.d/sing-box /usr/local/bin/sing-box /srv/web/ipfire/cgi-bin/sing-box.cgi 2>/dev/null || true
 chmod 755 /etc/rc.d/init.d/sing-box
 chmod +x /usr/local/bin/sing-box
 chmod +x /srv/web/ipfire/cgi-bin/sing-box.cgi
+chmod 440 /etc/sudoers.d/sing-box
 chmod 644 /var/ipfire/menu.d/81-singbox.menu 2>/dev/null || true
 chown nobody:nobody /var/ipfire/menu.d/81-singbox.menu 2>/dev/null || true
 if grep -q '"secret": "change-this-secret"' /usr/local/etc/sing-box/config.json; then
@@ -74,18 +78,7 @@ print_step "Configuring startup"
 ln -sf /etc/rc.d/init.d/sing-box /etc/rc.d/rc3.d/S99sing-box
 
 print_step "Configuring sudo permissions"
-sudoers_tmp="$(mktemp /tmp/sing-box-sudoers.XXXXXX)"
-trap 'rm -f "$sudoers_tmp"' EXIT
-cat > "$sudoers_tmp" <<'EOF'
-nobody ALL=(root) NOPASSWD: /etc/init.d/sing-box start
-nobody ALL=(root) NOPASSWD: /etc/init.d/sing-box stop
-nobody ALL=(root) NOPASSWD: /etc/init.d/sing-box restart
-nobody ALL=(root) NOPASSWD: /etc/init.d/sing-box status
-EOF
-chmod 440 "$sudoers_tmp"
-visudo -cf "$sudoers_tmp" >/dev/null
-mv "$sudoers_tmp" /etc/sudoers.d/sing-box
-trap - EXIT
+visudo -cf /etc/sudoers.d/sing-box >/dev/null
 
 print_step "Reloading Web service"
 /etc/init.d/apache reload >/dev/null 2>&1 || true
